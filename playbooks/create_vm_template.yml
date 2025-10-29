@@ -1,0 +1,8 @@
+---
+- name: Create Proxmox VM Template
+  hosts: proxmox
+  gather_facts: true
+  tasks:
+    - name: Include proxmox_vm_template role
+      ansible.builtin.include_role:
+        name: proxmox_vm_template

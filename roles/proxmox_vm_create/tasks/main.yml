@@ -1,0 +1,7 @@
+---
+- name: Create Kubernetes VMs on Proxmox
+  ansible.builtin.include_tasks: create_vm.yml
+  loop: "{{ query('inventory_hostnames', 'k8s_cluster') }}"
+  loop_control:
+    loop_var: vm_hostname
+  when: hostvars[vm_hostname]['proxmox_node'] == inventory_hostname

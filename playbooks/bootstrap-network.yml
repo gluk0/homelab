@@ -1,0 +1,91 @@
+---
+- name: Bootstrap Raspberry Pi Network Configuration
+  hosts: all
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Display current network configuration
+      debug:
+        msg: |
+          Current IP: {{ ansible_default_ipv4.address }}
+          Target IP: {{ target_ip }}
+
+    - name: Backup current network configuration
+      copy:
+        src: /etc/network/interfaces
+        dest: /etc/network/interfaces.backup
+        remote_src: yes
+      when: ansible_os_family == "Debian"
+      ignore_errors: yes
+
+    - name: Configure static IP for Raspberry Pi (Debian/Ubuntu)
+      blockinfile:
+        path: /etc/dhcpcd.conf
+        marker: "# {mark} ANSIBLE MANAGED STATIC IP"
+        block: |
+          interface eth0
+          static ip_address={{ target_ip }}/24
+          static routers={{ homelab_gateway }}
+          static domain_name_servers={{ dns_secondary }}
+        create: yes
+      when: ansible_os_family == "Debian"
+      notify: restart networking
+
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}.{{ homelab_domain }} {{ inventory_hostname }}"
+
+    - name: Create ansible user
+      user:
+        name: ansible
+        groups: sudo
+        shell: /bin/bash
+        createhome: yes
+        state: present
+
+    - name: Set up passwordless sudo for ansible user
+      lineinfile:
+        path: /etc/sudoers.d/ansible
+        line: 'ansible ALL=(ALL) NOPASSWD:ALL'
+        create: yes
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Create .ssh directory for ansible user
+      file:
+        path: /home/ansible/.ssh
+        state: directory
+        owner: ansible
+        group: ansible
+        mode: '0700'
+
+    - name: Add SSH public key for ansible user
+      authorized_key:
+        user: ansible
+        key: "{{ lookup('file', '~/.ssh/id_ed25519_homelab.pub') }}"
+        state: present
+
+    - name: Display next steps
+      debug:
+        msg: |
+          ==========================================
+          Bootstrap Complete
+          ==========================================
+          Host: {{ inventory_hostname }}
+          New IP: {{ target_ip }}
+
+
+  handlers:
+    - name: restart networking
+      shell: |
+        systemctl restart dhcpcd || systemctl restart networking
+      failed_when: false

@@ -1,0 +1,4 @@
+---
+proxmox_api_host: "{{ inventory_hostname }}"
+proxmox_api_user: "{{ vault_proxmox_api_token_id }}"
+proxmox_api_token_secret: "{{ vault_proxmox_api_token_secret }}"

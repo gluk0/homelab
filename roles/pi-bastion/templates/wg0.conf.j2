@@ -1,0 +1,26 @@
+[Interface]
+# Pi-A WireGuard Server Configuration
+Address = {{ wireguard_server_ip }}/{{ wireguard_network.split('/')[1] }}
+ListenPort = {{ wireguard_port }}
+PrivateKey = {{ server_private_key }}
+
+# Enable IP forwarding
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+# Allow SSH from homelab network
+PostUp = iptables -A INPUT -p tcp --dport 22 -s {{ homelab_network }} -j ACCEPT
+PostDown = iptables -D INPUT -p tcp --dport 22 -s {{ homelab_network }} -j ACCEPT
+
+# Example client configuration (uncomment and customize)
+# [Peer]
+# # Admin Laptop
+# PublicKey = <CLIENT_PUBLIC_KEY>
+# AllowedIPs = 10.30.0.2/32
+# PersistentKeepalive = 25
+
+# [Peer]
+# # Admin Phone
+# PublicKey = <CLIENT_PUBLIC_KEY>
+# AllowedIPs = 10.30.0.3/32
+# PersistentKeepalive = 25

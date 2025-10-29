@@ -1,0 +1,29 @@
+---
+# Global variables for all hosts
+homelab_domain: homelab.local
+homelab_timezone: Europe/London
+
+# Network configuration
+
+# homelab vlan
+homelab_vlan_id: 20
+homelab_network: 10.20.0.0/24
+homelab_gateway: 10.20.0.1
+home_vlan_id: 10
+# Home network with wifi clients .
+home_network: 192.168.10.0/24
+
+# DNS servers
+dns_primary: 10.20.0.3  # Pi-B (Pi-hole)
+dns_secondary: 1.1.1.1  # Cloudflare
+
+# NTP servers
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+  - 2.pool.ntp.org
+
+# SSH configuration (mostly global)
+ssh_public_keys:
+  - "{{ lookup('file', '~/.ssh/id_ed25519_homelab.pub') }}"
+ansible_ssh_public_key: "{{ lookup('file', '~/.ssh/id_ed25519_homelab.pub') }}"

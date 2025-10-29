@@ -1,0 +1,14 @@
+---
+- name: restart pihole-FTL
+  systemd:
+    name: pihole-FTL
+    state: restarted
+
+- name: reload pihole-FTL
+  systemd:
+    name: pihole-FTL
+    state: reloaded
+
+- name: update gravity
+  shell: pihole -g
+  changed_when: false

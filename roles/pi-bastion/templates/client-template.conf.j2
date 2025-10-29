@@ -1,0 +1,13 @@
+[Interface]
+# WireGuard Client Configuration
+# Generate client keys: wg genkey | tee privatekey | wg pubkey > publickey
+PrivateKey = <CLIENT_PRIVATE_KEY>
+Address = 10.30.0.X/32
+DNS = {{ dns_primary }}
+
+[Peer]
+# Pi-A WireGuard Server
+PublicKey = <SERVER_PUBLIC_KEY>
+Endpoint = <PUBLIC_IP_OR_DDNS>:{{ wireguard_port }}
+AllowedIPs = {{ homelab_network }}, {{ wireguard_network }}
+PersistentKeepalive = 25

@@ -1,0 +1,26 @@
+---
+# Raspberry Pi specific vars
+
+# Common packages for all Pis
+pi_common_packages:
+  - curl
+  - wget
+  - vim
+  - htop
+  - git
+  - net-tools
+  - dnsutils
+  - fail2ban
+  - ufw
+
+# System config variables for Ansible playbook
+pi_enable_ssh: true
+pi_disable_ipv6: false
+pi_enable_ufw: true
+
+# Firewall
+pi_ufw_rules:
+  - rule: allow
+    port: 22
+    proto: tcp
+    comment: 'SSH'

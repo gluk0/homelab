@@ -1,0 +1,33 @@
+---
+- name: Configure Proxmox Node Hostnames
+  hosts: proxmox
+  become: yes
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ hostname | default(inventory_hostname) }}"
+
+    - name: Update /etc/hosts - localhost entry
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ hostname | default(inventory_hostname) }}"
+
+    - name: Update /etc/hosts - IP entry
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^{{ ansible_host }}"
+        line: "{{ ansible_host }} {{ hostname | default(inventory_hostname) }}"
+
+    - name: Display current hostname
+      command: hostname
+      register: current_hostname
+      changed_when: false
+
+    - name: Show hostname
+      debug:
+        msg: "Node {{ inventory_hostname }} hostname is: {{ current_hostname.stdout }}"
+
+    - name: Check if reboot needed
+      debug:
+        msg: "If hostname changed, reboot with: ansible proxmox -m reboot -b"

@@ -1,0 +1,3 @@
+---
+# Control plane defaults
+kubernetes_control_plane_endpoint: "{{ ansible_host }}"

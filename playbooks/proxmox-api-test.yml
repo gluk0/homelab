@@ -1,0 +1,39 @@
+---
+- name: Test Proxmox API connectivity
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Get Proxmox version info
+      community.general.proxmox_query:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password | default(omit) }}"
+        api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+        api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+        validate_certs: "{{ proxmox_verify_ssl }}"
+        query: version
+      register: proxmox_version
+      delegate_to: localhost
+
+    - name: Display Proxmox version
+      debug:
+        msg: "Proxmox version: {{ proxmox_version.proxmox_api.version }}"
+
+    - name: List all VMs
+      community.general.proxmox_query:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password | default(omit) }}"
+        api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+        api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+        validate_certs: "{{ proxmox_verify_ssl }}"
+        query: cluster/resources
+        query_params:
+          type: vm
+      register: vm_list
+      delegate_to: localhost
+
+    - name: Display VM count
+      debug:
+        msg: "Found {{ vm_list.proxmox_api | length }} VMs"

@@ -1,0 +1,2 @@
+---
+kubernetes_control_plane_endpoint: "{{ hostvars[groups['k8s_control_planes'][0]]['ansible_host'] }}"

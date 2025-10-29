@@ -1,0 +1,125 @@
+---
+- name: Configure all Raspberry Pis
+  hosts: pis
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/pis.yml
+
+  pre_tasks:
+    - name: Wait for hosts to be reachable
+      wait_for_connection:
+        timeout: 300
+        delay: 5
+
+    - name: Gather facts
+      setup:
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install common packages
+      apt:
+        name: "{{ pi_common_packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Set timezone
+      timezone:
+        name: "{{ homelab_timezone }}"
+
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}.{{ homelab_domain }} {{ inventory_hostname }}"
+
+    - name: Configure DNS servers
+      lineinfile:
+        path: /etc/resolv.conf
+        regexp: '^nameserver'
+        line: "nameserver {{ dns_secondary }}"
+        state: present
+      when: inventory_hostname != 'pi-b'
+
+    - name: Ensure SSH is enabled
+      systemd:
+        name: ssh
+        enabled: yes
+        state: started
+
+    - name: Configure firewall defaults
+      ufw:
+        rule: "{{ item.rule }}"
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        comment: "{{ item.comment }}"
+      loop: "{{ pi_ufw_rules }}"
+      when: pi_enable_ufw | default(true)
+
+- name: Configure Pi-A as WireGuard Bastion
+  hosts: pi-a
+  become: yes
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/pis.yml
+
+  roles:
+    - pi-bastion
+
+  post_tasks:
+    - name: Display bastion information
+      debug:
+        msg: |
+          ==========================================
+          Pi-A (WireGuard Bastion) Setup Complete
+          ==========================================
+          IP Address: {{ ansible_host }}
+          WireGuard Port: {{ wireguard_port }}
+          VPN Network: {{ wireguard_network }}
+
+- name: Configure Pi-B as Pi-hole DNS Server
+  hosts: pi-b
+  become: yes
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/pis.yml
+
+  roles:
+    - pi-hole
+
+  post_tasks:
+    - name: Display Pi-hole information
+      debug:
+        msg: |
+          ==========================================
+          Pi-B (Pi-hole DNS) Setup Complete
+          ==========================================
+          IP Address: {{ ansible_host }}
+          Web Interface: http://{{ ansible_host }}/admin
+
+- name: Final verification
+  hosts: pis
+  become: yes
+
+  tasks:
+    - name: Verify system status
+      shell: |
+        echo "=== System Information ==="
+        echo "Hostname: $(hostname)"
+        echo "IP Address: $(hostname -I)"
+        echo "Uptime: $(uptime -p)"
+
+      register: system_info
+      changed_when: false
+
+    - name: Display system information
+      debug:
+        msg: "{{ system_info.stdout_lines }}"

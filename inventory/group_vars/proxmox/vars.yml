@@ -1,0 +1,44 @@
+---
+proxmox_api_host: "{{ ansible_host }}"
+proxmox_api_user: "root@pam"
+proxmox_api_token_id: "root@pam!ansible"
+proxmox_api_token_name: "ansible"
+proxmox_api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+proxmox_verify_ssl: false
+vm_template_id: 9000
+vm_template_name: "ubuntu-2404-cloudinit"
+vm_template_memory: 2048
+vm_template_cores: 2
+vm_template_bridge: "vmbr0"
+vm_template_vlan_tag: 20
+vm_template_storage: "local-lvm"
+vm_template_disk_size: "20G"
+ubuntu_cloud_image_url: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+cloud_image_filename: "ubuntu-24.04-server-cloudimg-amd64.img"
+k8s_disable_swap: true
+k8s_load_modules:
+  - overlay
+  - br_netfilter
+
+k8s_sysctl_params:
+  net.bridge.bridge-nf-call-iptables: 1
+  net.bridge.bridge-nf-call-ip6tables: 1
+  net.ipv4.ip_forward: 1
+  net.ipv4.conf.all.forwarding: 1
+
+containerd_version: "1.7"
+containerd_install: true
+
+cloudinit_user: ansible
+cloudinit_ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPOTcUH45+bLig2wA2yWnbRE2a+/B6lwfcdrk/4GoQub rich@laptop"
+cloudinit_packages:
+  - qemu-guest-agent
+  - curl
+  - wget
+  - vim
+  - htop
+  - net-tools
+
+proxmox_cluster_name: homelab-cluster
+pve_storage: local-lvm

@@ -1,0 +1,146 @@
+---
+# Proxmox Role - VM Template and Kubernetes Preparation
+
+- name: Set hostname to match inventory
+  hostname:
+    name: "{{ hostname | default(inventory_hostname) }}"
+  when: hostname is defined
+
+- name: Update /etc/hosts with correct hostname
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ hostname | default(inventory_hostname) }}"
+  when: hostname is defined
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required packages for Proxmox
+  apt:
+    name:
+      - libguestfs-tools
+      - python3-pip
+      - python3-proxmoxer
+      - python3-requests
+      - wget
+      - curl
+      - cloud-init
+      - qemu-guest-agent
+    state: present
+
+- name: Create temporary directory for cloud image
+  file:
+    path: /tmp/cloud-images
+    state: directory
+    mode: '0755'
+
+- name: Check if VM template already exists
+  shell: qm list | grep "{{ vm_template_id }}" || true
+  register: vm_template_check
+  changed_when: false
+
+- name: Download Ubuntu cloud image
+  get_url:
+    url: "{{ ubuntu_cloud_image_url }}"
+    dest: "/tmp/cloud-images/ubuntu-24.04-server.img"
+    mode: '0644'
+  when: vm_template_check.stdout == ""
+
+- name: Customize cloud image with virt-customize
+  shell: |
+    virt-customize -a /tmp/cloud-images/ubuntu-24.04-server.img \
+      --install qemu-guest-agent \
+      --truncate /etc/machine-id \
+      --run-command 'mkdir -p /etc/cloud/cloud.cfg.d/'
+  when: vm_template_check.stdout == ""
+  register: virt_customize
+  changed_when: virt_customize.rc == 0
+
+- name: Create VM template
+  shell: |
+    qm create {{ vm_template_id }} \
+      --name {{ vm_template_name }} \
+      --memory {{ vm_template_memory }} \
+      --cores {{ vm_template_cores }} \
+      --net0 virtio,bridge={{ vm_template_bridge }},tag={{ vm_template_vlan_tag }} \
+      --agent enabled=1 \
+      --ostype l26 \
+      --cpu host \
+      --onboot 1
+  when: vm_template_check.stdout == ""
+  register: vm_create
+  changed_when: vm_create.rc == 0
+
+- name: Import disk to VM
+  shell: |
+    qm importdisk {{ vm_template_id }} /tmp/cloud-images/ubuntu-24.04-server.img {{ vm_template_storage }}
+  when: vm_template_check.stdout == ""
+  register: import_disk
+  changed_when: import_disk.rc == 0
+
+- name: Attach disk to VM
+  shell: |
+    qm set {{ vm_template_id }} --scsihw virtio-scsi-pci --scsi0 {{ vm_template_storage }}:vm-{{ vm_template_id }}-disk-0
+  when: vm_template_check.stdout == ""
+
+- name: Configure boot and cloud-init
+  shell: |
+    qm set {{ vm_template_id }} --boot c --bootdisk scsi0
+    qm set {{ vm_template_id }} --ide2 {{ vm_template_storage }}:cloudinit
+    qm set {{ vm_template_id }} --serial0 socket --vga serial0
+    qm set {{ vm_template_id }} --ipconfig0 ip=dhcp
+  when: vm_template_check.stdout == ""
+
+- name: Resize disk
+  shell: |
+    qm resize {{ vm_template_id }} scsi0 {{ vm_template_disk_size }}
+  when: vm_template_check.stdout == ""
+
+- name: Convert VM to template
+  shell: |
+    qm template {{ vm_template_id }}
+  when: vm_template_check.stdout == ""
+
+- name: Configure kernel modules for Kubernetes
+  template:
+    src: k8s-modules.conf.j2
+    dest: /etc/modules-load.d/k8s.conf
+    mode: '0644'
+  notify: load kernel modules
+
+- name: Configure sysctl for Kubernetes
+  template:
+    src: k8s-sysctl.conf.j2
+    dest: /etc/sysctl.d/k8s.conf
+    mode: '0644'
+  notify: reload sysctl
+
+- name: Disable swap
+  shell: |
+    swapoff -a
+    sed -i '/ swap / s/^/#/' /etc/fstab
+  when: k8s_disable_swap | default(true)
+  register: swap_disabled
+  changed_when: swap_disabled.rc == 0
+
+- name: Create cloud-init snippet directory
+  file:
+    path: /var/lib/vz/snippets
+    state: directory
+    mode: '0755'
+
+- name: Create cloud-init user-data snippet
+  template:
+    src: cloud-init-user-data.yml.j2
+    dest: /var/lib/vz/snippets/cloud-init-k8s.yml
+    mode: '0644'
+
+- name: Display VM template information
+  debug:
+    msg: |
+      VM Template created successfully!
+      Template ID: {{ vm_template_id }}
+      Template Name: {{ vm_template_name }}

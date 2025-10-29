@@ -1,0 +1,124 @@
+---
+- name: Force cleanup of VM {{ vm_template_id }} if it exists
+  ansible.builtin.shell: |
+    qm stop {{ vm_template_id }} 2>/dev/null || true
+    qm destroy {{ vm_template_id }} --destroy-unreferenced-disks --purge 2>/dev/null || true
+    rm -f /etc/pve/nodes/{{ pve_node_name }}/qemu-server/{{ vm_template_id }}.conf 2>/dev/null || true
+  delegate_to: "{{ inventory_hostname }}"
+  failed_when: false
+  changed_when: false
+
+- name: Wait for cleanup to complete
+  ansible.builtin.pause:
+    seconds: 2
+
+- name: Check if VM template already exists
+  community.general.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_verify_ssl }}"
+    node: "{{ pve_node_name }}"
+    vmid: "{{ vm_template_id }}"
+    state: current
+  register: template_check
+  failed_when: false
+  become: false
+  delegate_to: localhost
+
+- name: Create VM template
+  when: template_check.failed or template_check.vmid is not defined
+  block:
+    - name: Check if VM exists and get its template status
+      ansible.builtin.shell: |
+        qm config {{ vm_template_id }} 2>/dev/null | grep -q 'template: 1' && echo "IS_TEMPLATE" || echo "NOT_TEMPLATE"
+      register: vm_template_status
+      delegate_to: "{{ inventory_hostname }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Delete existing VM if it exists and is not a template
+      ansible.builtin.shell: |
+        qm stop {{ vm_template_id }} 2>/dev/null || true
+        sleep 2
+        qm destroy {{ vm_template_id }} --destroy-unreferenced-disks --purge 2>&1 || rm -f /etc/pve/nodes/{{ pve_node_name }}/qemu-server/{{ vm_template_id }}.conf
+      when: vm_template_status.stdout == "NOT_TEMPLATE"
+      delegate_to: "{{ inventory_hostname }}"
+      failed_when: false
+      changed_when: true
+
+    - name: Wait for VM to be fully destroyed
+      ansible.builtin.pause:
+        seconds: 3
+      when: vm_template_status.stdout == "NOT_TEMPLATE"
+
+    - name: Skip template creation if template already exists
+      ansible.builtin.set_fact:
+        skip_template_creation: true
+      when: vm_template_status.stdout == "IS_TEMPLATE"
+
+    - name: Download Ubuntu cloud image
+      ansible.builtin.get_url:
+        url: "{{ ubuntu_cloud_image_url }}"
+        dest: "/tmp/{{ cloud_image_filename }}"
+        mode: '0644'
+      delegate_to: "{{ inventory_hostname }}"
+      when: skip_template_creation is not defined or skip_template_creation is not true
+
+    - name: Create empty VM
+      ansible.builtin.command:
+        cmd: qm create {{ vm_template_id }} --name {{ vm_template_name }} --memory {{ vm_template_memory }} --cores {{ vm_template_cores }} --net0 virtio,bridge={{ vm_template_bridge }}
+      delegate_to: "{{ inventory_hostname }}"
+      changed_when: true
+      failed_when: false
+      when: skip_template_creation is not defined or skip_template_creation is not true
+      register: vm_create_result
+
+    - name: Check if VM config file exists
+      ansible.builtin.stat:
+        path: /etc/pve/nodes/{{ pve_node_name }}/qemu-server/{{ vm_template_id }}.conf
+      register: vm_config_check
+      delegate_to: "{{ inventory_hostname }}"
+      when: skip_template_creation is not defined or skip_template_creation is not true
+
+    - name: Display VM creation status
+      ansible.builtin.debug:
+        msg: "VM create result: {{ vm_create_result.rc }} - VM config exists: {{ vm_config_check.stat.exists if vm_config_check.stat is defined else 'unknown' }}"
+      when: skip_template_creation is not defined and vm_config_check is defined
+
+    - name: Import disk image
+      ansible.builtin.command:
+        cmd: >
+          qm importdisk {{ vm_template_id }}
+          /tmp/{{ cloud_image_filename }}
+          {{ vm_template_storage }}
+      changed_when: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: skip_template_creation is not defined or skip_template_creation is not true
+
+    - name: Configure VM with imported disk
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - "qm set {{ vm_template_id }} --scsihw virtio-scsi-pci --scsi0 {{ vm_template_storage }}:vm-{{ vm_template_id }}-disk-0"
+        - "qm set {{ vm_template_id }} --boot c --bootdisk scsi0"
+        - "qm set {{ vm_template_id }} --ide2 {{ vm_template_storage }}:cloudinit"
+        - "qm set {{ vm_template_id }} --serial0 socket --vga serial0"
+        - "qm set {{ vm_template_id }} --agent enabled=1"
+      changed_when: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: skip_template_creation is not defined or skip_template_creation is not true
+
+    - name: Convert VM to template
+      ansible.builtin.command:
+        cmd: qm template {{ vm_template_id }}
+      changed_when: true
+      delegate_to: "{{ inventory_hostname }}"
+      when: skip_template_creation is not defined or skip_template_creation is not true
+
+    - name: Clean up downloaded image
+      ansible.builtin.file:
+        path: "/tmp/{{ cloud_image_filename }}"
+        state: absent
+      delegate_to: "{{ inventory_hostname }}"
+      when: skip_template_creation is not defined or skip_template_creation is not true
