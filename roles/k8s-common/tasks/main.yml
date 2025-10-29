@@ -1,0 +1,122 @@
+---
+- name: Resize root filesystem if needed
+  shell: |
+    if [ "$(df -h / | tail -1 | awk '{print $2}' | sed 's/G//')" -lt 10 ]; then
+      growpart /dev/sda 1 || true
+      resize2fs /dev/sda1 || true
+    fi
+  changed_when: false
+  ignore_errors: yes
+
+- name: Ensure keyring directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Kubernetes signing key
+  shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+    state: present
+    filename: kubernetes
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install Kubernetes packages
+  apt:
+    name:
+      - kubelet={{ kubernetes_version }}
+      - kubeadm={{ kubernetes_version }}
+      - kubectl={{ kubernetes_version }}
+    state: present
+    update_cache: no
+
+- name: Hold Kubernetes packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Load required kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Enable kernel modules persistently
+  lineinfile:
+    path: /etc/modules-load.d/k8s.conf
+    line: "{{ item }}"
+    create: yes
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Configure sysctl settings for Kubernetes
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: yes
+    reload: yes
+  loop:
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+
+- name: Disable swap
+  shell: |
+    swapoff -a
+    sed -i '/ swap / s/^/#/' /etc/fstab
+  changed_when: false
+
+- name: Install containerd
+  apt:
+    name: containerd
+    state: present
+    update_cache: no
+
+- name: Ensure containerd config directory exists
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+
+- name: Generate default containerd config
+  shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+
+- name: Enable SystemdCgroup in containerd
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: restart containerd
+
+- name: Start and enable containerd
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+
+- name: Start and enable kubelet
+  systemd:
+    name: kubelet
+    state: started
+    enabled: yes

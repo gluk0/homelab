@@ -1,0 +1,68 @@
+---
+- name: "Debug node name for {{ vm_hostname }}"
+  ansible.builtin.debug:
+    msg: "Using node: {{ hostvars[inventory_hostname]['pve_node_name'] }}"
+
+- name: "Clone template to create VM {{ vm_hostname }}"
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_name }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    api_host: "{{ hostvars[inventory_hostname]['ansible_host'] }}"
+    validate_certs: "{{ proxmox_verify_ssl | default(false) }}"
+    node: "{{ hostvars[inventory_hostname]['pve_node_name'] }}"
+    newid: "{{ hostvars[vm_hostname]['vmid'] }}"
+    name: "{{ vm_hostname }}"
+    clone: "{{ vm_template_name }}"
+    full: yes
+    storage: "{{ pve_storage }}"
+  delegate_to: localhost
+  become: false
+  register: vm_clone
+
+- name: "Configure VM {{ vm_hostname }}"
+  community.general.proxmox_kvm:
+    node: "{{ hostvars[inventory_hostname]['pve_node_name'] }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_name }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    api_host: "{{ hostvars[inventory_hostname]['ansible_host'] }}"
+    validate_certs: "{{ proxmox_verify_ssl | default(false) }}"
+    vmid: "{{ hostvars[vm_hostname]['vmid'] }}"
+    cores: "{{ hostvars[vm_hostname]['cores'] }}"
+    memory: "{{ hostvars[vm_hostname]['memory'] }}"
+    net:
+      net0: "virtio,bridge=vmbr0,tag={{ homelab_vlan_id }}"
+    ipconfig:
+      ipconfig0: "ip={{ hostvars[vm_hostname]['ansible_host'] }}/24,gw={{ homelab_gateway }}"
+    ciuser: "{{ hostvars[vm_hostname]['ansible_user'] }}"
+    sshkeys: "{{ lookup('file', '~/.ssh/id_ed25519_homelab.pub') }}"
+    searchdomains: "{{ homelab_domain }}"
+    nameservers: "{{ dns_primary }}"
+    update: yes
+  delegate_to: localhost
+  become: false
+  register: vm_config
+
+- name: "Resize disk for VM {{ vm_hostname }}"
+  shell: "qm resize {{ hostvars[vm_hostname]['vmid'] }} scsi0 {{ hostvars[vm_hostname]['disk_size'] }}"
+  register: resize_result
+  failed_when:
+    - resize_result.rc != 0
+    - "'matches current size' not in resize_result.stderr"
+  changed_when: "'successfully resized' in resize_result.stdout"
+
+
+- name: "Start VM {{ vm_hostname }}"
+  community.general.proxmox_kvm:
+    node: "{{ hostvars[inventory_hostname]['pve_node_name'] }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_name }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    api_host: "{{ hostvars[inventory_hostname]['ansible_host'] }}"
+    validate_certs: "{{ proxmox_verify_ssl | default(false) }}"
+    vmid: "{{ hostvars[vm_hostname]['vmid'] }}"
+    state: started
+  delegate_to: localhost
+  become: false
+  when: vm_clone.changed or vm_config.changed

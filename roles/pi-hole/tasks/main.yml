@@ -1,0 +1,103 @@
+---
+# Pi-hole Role - DNS Server Setup
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install Pi-hole dependencies
+  apt:
+    name:
+      - curl
+      - git
+      - sudo
+      - lsof
+      - dnsutils
+      - netcat-openbsd
+    state: present
+
+- name: Create Pi-hole configuration directory
+  file:
+    path: /etc/pihole
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Generate random Pi-hole web password
+  set_fact:
+    pihole_web_password: "{{ lookup('password', '/tmp/pihole_password_' + inventory_hostname + ' length=16 chars=ascii_letters,digits') }}"
+  when: pihole_web_password is not defined
+
+- name: Create setupVars.conf for unattended install
+  template:
+    src: setupVars.conf.j2
+    dest: /etc/pihole/setupVars.conf
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Download Pi-hole installer
+  get_url:
+    url: https://install.pi-hole.net
+    dest: /tmp/install-pihole.sh
+    mode: '0755'
+
+- name: Check if Pi-hole is already installed
+  stat:
+    path: /usr/local/bin/pihole
+  register: pihole_binary
+
+- name: Install Pi-hole
+  shell: /tmp/install-pihole.sh --unattended
+  when: not pihole_binary.stat.exists
+  register: pihole_install
+  changed_when: pihole_install.rc == 0
+
+- name: Set Pi-hole web password
+  shell: pihole -a -p "{{ pihole_web_password }}"
+  no_log: true
+  when: pihole_web_password is defined
+
+- name: Store Pi-hole password locally
+  copy:
+    content: |
+      Pi-hole Web Interface Password: {{ pihole_web_password }}
+      Web Interface URL: http://{{ ansible_host }}/admin
+    dest: "/tmp/pihole_password_{{ inventory_hostname }}.txt"
+    mode: '0600'
+  delegate_to: localhost
+  become: no
+
+- name: Enable Pi-hole service
+  systemd:
+    name: pihole-FTL
+    enabled: yes
+    state: started
+
+- name: Configure UFW rules for Pi-hole
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: '53', proto: 'tcp', comment: 'DNS TCP' }
+    - { port: '53', proto: 'udp', comment: 'DNS UDP' }
+    - { port: '80', proto: 'tcp', comment: 'Pi-hole Web Interface' }
+    - { port: '443', proto: 'tcp', comment: 'Pi-hole Web Interface HTTPS' }
+  when: pi_enable_ufw | default(true)
+
+- name: Update gravity (block lists)
+  shell: pihole -g
+  changed_when: false
+  async: 300
+  poll: 0
+
+- name: Display Pi-hole information
+  debug:
+    msg: |
+      Pi-hole installation complete!
+      Web Interface: http://{{ ansible_host }}/admin
+      Password saved to: /tmp/pihole_password_{{ inventory_hostname }}.txt
+      DNS Server: {{ ansible_host }}

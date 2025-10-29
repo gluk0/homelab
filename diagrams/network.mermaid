@@ -1,0 +1,40 @@
+graph TD
+  %% Nodes
+  RMT["💻 Remote Admin"]
+  INTERNET["🌍 Internet"]
+  PLUSNET["📡 Plusnet Modem/Router (Bridge)"]
+  OPENWRT["🧭 OpenWrt Router"]
+  SWITCH["🔀 Managed Switch (trunk VLANs)"]
+  VLAN10["📶 VLAN10 Home 192.168.10.0/24"]
+  VLAN20["🧪 VLAN20 Homelab 10.20.0.0/24"]
+  PIA["🔐 'Pi-A Bastion / WireGuard"]
+  PIB["🧠 Pi-B Pihole DNS (10.20.0.3)"]
+  MINI1["🖥️ M720Q-1 (Proxmox)"]
+  MINI2["🖥️ M720Q-2(Proxmox)"]
+  MINI3["💾 MM720Q-3 (Storage / Tools)"]
+  WIFI["📲 Wi-Fi Clients "]
+
+  %% Connections
+  RMT -->|🔒 WireGuard VPN| PIA
+  RMT --> INTERNET
+  INTERNET --> PLUSNET
+  PLUSNET --> OPENWRT
+  OPENWRT --> SWITCH
+  SWITCH --> VLAN10
+  SWITCH --> VLAN20
+
+  VLAN10 --> WIFI
+  VLAN20 --> PIA
+  VLAN20 --> PIB
+  VLAN20 --> MINI1
+  VLAN20 --> MINI2
+  VLAN20 --> MINI3
+
+  %% Logical flows / labels
+  PIA -->|🪜 SSH jump host| MINI1
+  PIA --> MINI2
+  PIA --> MINI3
+  MINI1 -. DNS .-> PIB
+  MINI2 -. DNS .-> PIB
+  MINI3 -. DNS .-> PIB
+  WIFI -. Optional DNS .-> PIB

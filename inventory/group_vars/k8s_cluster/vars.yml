@@ -1,0 +1,9 @@
+---
+# Kubernetes Cluster Variables
+
+kubernetes_version: "1.30.2-1.1"
+kubernetes_pod_network_cidr: "10.244.0.0/16"
+kubernetes_service_cidr: "10.96.0.0/12"
+kubernetes_cni: "flannel"
+kubernetes_control_plane_endpoint: "{{ hostvars[groups['k8s_control_planes'][0]]['ansible_host'] }}"
+kubernetes_cluster_name: "homelab-k8s"

@@ -1,0 +1,12 @@
+---
+- name: Setup Kubernetes VMs on Proxmox
+  hosts: proxmox
+  gather_facts: true
+  become: false
+  vars_files:
+    - ../vault.yml
+    - ../group_vars/all.yml
+    - ../group_vars/proxmox.yml
+
+  roles:
+    - role: proxmox_vm_create

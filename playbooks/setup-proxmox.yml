@@ -1,0 +1,90 @@
+- name: Configure Proxmox Nodes
+  hosts: proxmox
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Wait for hosts to be reachable
+      wait_for_connection:
+        timeout: 300
+        delay: 5
+
+    - name: Gather facts
+      setup:
+
+    - name: Set timezone
+      shell: timedatectl set-timezone {{ homelab_timezone }}
+      changed_when: false
+
+    - name: Remove Proxmox Enterprise repository file (.list)
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+
+    - name: Remove Ceph Enterprise repository file (.list)
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/ceph.list
+        state: absent
+
+    - name: Remove Proxmox Enterprise repository file (.sources)
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/pve-enterprise.sources
+        state: absent
+
+    - name: Remove Ceph Enterprise repository file (.sources)
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/ceph.sources
+        state: absent
+
+    - name: Configure Proxmox no-subscription repository
+      copy:
+        dest: /etc/apt/sources.list.d/pve-no-subscription.list
+        content: |
+          deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription
+        mode: '0644'
+
+    - name: Configure DNS in /etc/resolv.conf
+      copy:
+        content: |
+          nameserver {{ dns_primary }}
+          nameserver {{ dns_secondary }}
+          search {{ homelab_domain }}
+        dest: /etc/resolv.conf
+        mode: '0644'
+
+    - name: Configure Proxmox network interface
+      blockinfile:
+        path: /etc/network/interfaces
+        marker: "# {mark} ANSIBLE MANAGED HOMELAB VLAN"
+        block: |
+          # Homelab VLAN {{ homelab_vlan_id }} configuration
+          auto vmbr0.{{ homelab_vlan_id }}
+          iface vmbr0.{{ homelab_vlan_id }} inet manual
+        create: no
+      notify: restart networking
+
+    - name: Check if Proxmox cluster exists
+      shell: pvecm status 2>/dev/null || echo "No cluster"
+      register: cluster_status
+      changed_when: false
+      failed_when: false
+
+  roles:
+    - proxmox
+
+  post_tasks:
+    - name: Display Proxmox node information
+      debug:
+        msg: |
+          ==========================================
+          Proxmox Node: {{ pve_node_name }}
+          ==========================================
+          IP Address: {{ ansible_host }}
+          Web Interface: https://{{ ansible_host }}:8006
+          VM Template ID: {{ vm_template_id }}
+          VM Template Name: {{ vm_template_name }}
+
+  handlers:
+    - name: restart networking
+      shell: ifreload -a
+      failed_when: false

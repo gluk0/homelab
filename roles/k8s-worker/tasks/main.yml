@@ -1,0 +1,33 @@
+---
+# Kubernetes Worker specific tasks
+
+- name: Check if already joined to cluster
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Wait for control plane to be ready
+  wait_for:
+    host: "{{ kubernetes_control_plane_endpoint }}"
+    port: 6443
+    delay: 10
+    timeout: 600
+    state: started
+  when: not kubelet_conf.stat.exists
+
+- name: Fetch join command from control plane
+  shell: kubeadm token create --print-join-command
+  delegate_to: "{{ groups['k8s_control_planes'][0] }}"
+  register: join_command_fetch
+  when: not kubelet_conf.stat.exists
+  become: yes
+
+- name: Join worker to cluster
+  shell: "{{ join_command_fetch.stdout }}"
+  when: not kubelet_conf.stat.exists and join_command_fetch.stdout is defined
+  register: join_result
+
+- name: Display join result
+  debug:
+    msg: "Worker node {{ inventory_hostname }} successfully joined the cluster"
+  when: join_result.changed | default(false)

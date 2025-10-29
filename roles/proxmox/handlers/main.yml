@@ -1,0 +1,10 @@
+---
+- name: reload sysctl
+  shell: sysctl --system
+  changed_when: false
+
+- name: load kernel modules
+  shell: |
+    modprobe overlay
+    modprobe br_netfilter
+  changed_when: false

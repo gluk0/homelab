@@ -1,0 +1,6 @@
+---
+template_vmid: 9000
+template_memory: 2048
+template_cores: 2
+cloud_image_url: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+cloud_image_filename: "ubuntu-24.04-server-cloudimg-amd64.img"

@@ -1,0 +1,82 @@
+---
+- name: Setup Portainer on Kubernetes
+  hosts: k8s_control_planes[0]
+  gather_facts: yes
+  become: yes
+  become_user: ansible
+
+  vars:
+    portainer_namespace: portainer
+    portainer_version: latest
+
+  environment:
+    KUBECONFIG: /home/ansible/.kube/config
+
+  tasks:
+    - name: Ensure kubectl is available
+      command: kubectl version --client
+      register: kubectl_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create Portainer namespace
+      command: kubectl create namespace {{ portainer_namespace }}
+      register: namespace_created
+      failed_when:
+        - namespace_created.rc != 0
+        - "'AlreadyExists' not in namespace_created.stderr"
+      changed_when: namespace_created.rc == 0
+
+    - name: Add Portainer Helm repository
+      command: helm repo add portainer https://portainer.github.io/k8s/
+      register: helm_repo_add
+      changed_when: "'has been added' in helm_repo_add.stdout"
+      failed_when: false
+
+    - name: Update Helm repositories
+      command: helm repo update
+      changed_when: false
+
+    - name: Check if Portainer is already installed
+      command: helm list -n {{ portainer_namespace }}
+      register: portainer_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Portainer using Helm
+      command: >
+        helm install portainer portainer/portainer
+        --namespace {{ portainer_namespace }}
+        --set service.type=NodePort
+        --set service.nodePort=30777
+        --set tls.force=false
+      when: "'portainer' not in portainer_check.stdout"
+      register: portainer_installed
+
+    - name: Wait for Portainer deployment to be ready
+      command: kubectl rollout status deployment/portainer -n {{ portainer_namespace }}
+      register: rollout_status
+      until: rollout_status.rc == 0
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - name: Get Portainer service information
+      command: kubectl get svc -n {{ portainer_namespace }}
+      register: portainer_svc
+      changed_when: false
+
+    - name: Display Portainer access information
+      debug:
+        msg: |
+          ==========================================
+          Portainer Setup Complete!
+          ==========================================
+          Access Portainer at: http://{{ ansible_host }}:30777
+
+          Service Information:
+          {{ portainer_svc.stdout }}
+
+          Default credentials:
+          - Create admin user on first login
+          ==========================================

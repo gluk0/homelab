@@ -1,0 +1,20 @@
+---
+# Bootstrap inventory for initial setup when IPs are not yet assigned
+# Update ansible_host with the current DHCP-assigned IPs when it first boots on the network then force update /etc/hosts later. 
+all:
+  children:
+    pis:
+      hosts:
+        pi-a:
+          ansible_host: 10.20.0.2      # Final static IP
+          target_ip: 10.20.0.2           # Final static IP
+          wireguard_enabled: true
+        pi-b:
+          ansible_host: 10.20.0.3      # Final static IP
+          target_ip: 10.20.0.3           # Final static IP
+          pihole_enabled: true
+      vars:
+        ansible_user: "{{ lookup('env', 'ANSIBLE_PI_USER') }}"
+        ansible_ssh_pass: "{{ lookup('env', 'ANSIBLE_PI_PASS') }}"
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_become_method: sudo

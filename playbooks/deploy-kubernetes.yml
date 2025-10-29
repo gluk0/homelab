@@ -1,0 +1,74 @@
+---
+# Unified Kubernetes Deployment Playbook
+# Deploys Kubernetes across control plane and worker nodes
+
+- name: Deploy Kubernetes Control Plane
+  hosts: k8s_control_planes
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - k8s-common
+    - k8s-control-plane
+
+  post_tasks:
+    - name: Display control plane information
+      debug:
+        msg:
+          - "==========================================="
+          - "Kubernetes Control Plane: {{ inventory_hostname }}"
+          - "==========================================="
+          - "IP Address: {{ ansible_host }}"
+          - "API Endpoint: https://{{ ansible_host }}:6443"
+          - "Kubeconfig: /home/ansible/.kube/config"
+          - ""
+
+- name: Deploy Kubernetes Workers
+  hosts: k8s_workers
+  become: yes
+  gather_facts: yes
+  serial: 1  # Join workers one at a time to avoid race conditions that seem to happen 
+
+  roles:
+    - k8s-common
+    - k8s-worker
+
+  post_tasks:
+    - name: Display worker information
+      debug:
+        msg:
+          - "==========================================="
+          - "Kubernetes Worker: {{ inventory_hostname }}"
+          - "==========================================="
+          - "IP Address: {{ ansible_host }}"
+          - "Joined to control plane: {{ kubernetes_control_plane_endpoint }}"
+          - ""
+
+- name: Verify Cluster Status
+  hosts: k8s_control_planes[0]
+  become: yes
+  become_user: ansible
+  gather_facts: no
+
+  tasks:
+    - name: Get all nodes
+      shell: kubectl get nodes -o wide
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      register: nodes_output
+      changed_when: false
+
+    - name: Display cluster nodes
+      debug:
+        msg: "{{ nodes_output.stdout_lines }}"
+
+    - name: Get all pods
+      shell: kubectl get pods -A
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      register: pods_output
+      changed_when: false
+
+    - name: Display all pods
+      debug:
+        msg: "{{ pods_output.stdout_lines }}"

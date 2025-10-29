@@ -1,0 +1,51 @@
+---
+- name: Create Proxmox API token
+  hosts: proxmox
+  become: yes
+  vars:
+    force_recreate: true
+
+  tasks:
+    - name: Remove existing token if force_recreate is true
+      shell: |
+        pveum user token remove root@pam ansible
+      when: force_recreate | bool
+      register: remove_result
+      failed_when: false
+
+    - name: Create API token via CLI
+      shell: |
+        pveum user token add root@pam ansible --privsep 0
+      register: token_result
+      changed_when: "'value' in token_result.stdout"
+      failed_when:
+        - token_result.rc != 0
+        - "'Token already exists' not in token_result.stderr"
+
+    - name: Display token already exists message
+      debug:
+        msg: |
+          Token 'root@pam!ansible' already exists.
+          To recreate it, run this playbook with:
+            ansible-playbook playbooks/proxmox-create-api-token.yml -e force_recreate=true
+      when:
+        - token_result.rc != 0
+        - "'Token already exists' in token_result.stderr"
+
+    - name: Display token secret
+      debug:
+        msg: |
+          API Token created!
+          Add this to your vault.yml:
+          vault_proxmox_api_token_id: "root@pam!ansible"
+          vault_proxmox_api_token_secret: "{{ token_result.stdout.split('value: ')[1] | trim }}"
+      when:
+        - token_result.rc == 0
+        - "'value:' in token_result.stdout"
+
+    - name: Display raw output if parsing failed
+      debug:
+        msg: "Raw output: {{ token_result.stdout }}"
+      when:
+        - token_result.rc == 0
+        - "'value:' not in token_result.stdout"
