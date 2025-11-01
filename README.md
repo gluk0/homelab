@@ -1,6 +1,6 @@
 # homelab
 
-a composible homelab in ansible, with some manual steps for learning and a sandbox for other things..
+Ansible repository for Proxmox and Kubernetes bootstrapping, Router seeding is in `./openwrt` 
 
 <table>
 <tr>
