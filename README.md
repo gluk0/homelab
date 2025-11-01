@@ -2,10 +2,18 @@
 
 a composible homelab in ansible, with some manual steps for learning and a sandbox for other things..
 
-# 🚀 quick start
+<table>
+<tr>
+<td width="50%">
 
-```bash
+## 🚀 Rack Bootstrapping
+```bash 
 cd /home/rich/homelab
+# Each make command runs ansible playbooks which deliver 
+# initial setup bootstrapping to Pi's and provision the initial
+# proxmox instances then subsequently provisions Kubernetes on these
+# VM's. Additional requirements for CNI's are setup like Flannel and Portainer. 
+
 
 # 1. Bootstrap (first time only)
 make bootstrap
@@ -31,6 +39,16 @@ make setup-portainer
 # 8. Check status
 make status
 ```
+
+</td>
+<td width="50%">
+
+## 🏠 Rack Build
+<img src="img/homelab.jpg" width="60%" alt="Homelab">
+
+</td>
+</tr>
+</table>
 
 
 ## 🔧 Common Tasks
