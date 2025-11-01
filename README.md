@@ -44,7 +44,7 @@ make status
 <td width="50%">
 
 ## 🏠 Rack Build
-<img src="img/homelab.jpg" width="60%" alt="Homelab">
+<img src="img/homelab.jpg" width="400" alt="Homelab">
 
 </td>
 </tr>
