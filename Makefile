@@ -1,17 +1,20 @@
-.PHONY: help bootstrap setup-pis setup-proxmox setup-all ping check lint
+.PHONY: help check-deps bootstrap setup-pis setup-proxmox setup-all ping ping-pis ping-proxmox \
+	bootstrap-pi-a setup-pi-a setup-pi-b setup-proxmox-01 setup-proxmox-02 setup-proxmox-03 \
+	setup-proxmox-cluster deploy-k8s-vms deploy-kubernetes deploy-k8s-full setup-portainer \
+	k8s-status encrypt-vault decrypt-vault edit-vault status lint clean \
+	check-bootstrap check-pis check-proxmox
 
 VENV := .venv/bin/activate
-ANSIBLE := $(shell [ -f $(VENV) ] && echo ". $(VENV) &&" || echo "")
+
+.DEFAULT_GOAL := help
 
 help:
 	@echo "Homelab Ansible Automation"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  help              - Show this help message"
+	@echo ""
+	@echo "Setup & Configuration:"
 	@echo "  check-deps        - Check required dependencies"
-	@echo "  ping              - Test connectivity to all hosts"
-	@echo "  ping-pis          - Test connectivity to Raspberry Pis"
-	@echo "  ping-proxmox      - Test connectivity to Proxmox nodes"
 	@echo "  bootstrap         - Bootstrap network configuration (initial setup)"
 	@echo "  bootstrap-pi-a    - Bootstrap Pi-A only"
 	@echo "  setup-pis         - Setup Raspberry Pis (WireGuard + Pi-hole)"
@@ -22,15 +25,35 @@ help:
 	@echo "  setup-proxmox-02  - Setup only pve-02"
 	@echo "  setup-proxmox-03  - Setup only pve-03"
 	@echo "  setup-proxmox-cluster - Create Proxmox cluster from all nodes"
+	@echo "  setup-all         - Setup everything (Pis + Proxmox)"
+	@echo ""
+	@echo "Kubernetes Deployment:"
 	@echo "  deploy-k8s-vms    - Deploy K8s VMs on all Proxmox hosts"
 	@echo "  deploy-kubernetes - Deploy Kubernetes to existing VMs"
 	@echo "  deploy-k8s-full   - Deploy VMs and Kubernetes (full K8s setup)"
 	@echo "  setup-portainer   - Deploy Portainer on Kubernetes cluster"
-	@echo "  setup-all         - Setup everything (Pis + Proxmox)"
+	@echo ""
+	@echo "Testing & Status:"
+	@echo "  ping              - Test connectivity to all hosts"
+	@echo "  ping-pis          - Test connectivity to Raspberry Pis"
+	@echo "  ping-proxmox      - Test connectivity to Proxmox nodes"
 	@echo "  status            - Check status of all hosts"
 	@echo "  k8s-status        - Check Kubernetes cluster status"
-	@echo "  lint              - Lint Ansible playbooks"
+	@echo ""
+	@echo "Ansible Vault:"
+	@echo "  encrypt-vault     - Encrypt vault.yml file"
+	@echo "  decrypt-vault     - Decrypt vault.yml file"
+	@echo "  edit-vault        - Edit encrypted vault.yml file"
+	@echo ""
+	@echo "Validation:"
+	@echo "  check-bootstrap   - Dry run of bootstrap playbook"
+	@echo "  check-pis         - Dry run of Pi setup playbook"
+	@echo "  check-proxmox     - Dry run of Proxmox setup playbook"
+	@echo "  lint              - Lint Ansible playbooks and YAML files"
+	@echo ""
+	@echo "Utilities:"
 	@echo "  clean             - Clean temporary files"
+	@echo "  help              - Show this help message"
 
 check-deps:
 	@echo "Checking dependencies..."
@@ -40,13 +63,13 @@ check-deps:
 	@test -f ~/.ssh/id_ed25519_homelab || { echo "WARNING: SSH key not found at ~/.ssh/id_ed25519_homelab"; }
 	@echo "✓ All dependencies satisfied"
 
-ping:
+ping: check-deps
 	@bash -c ". .venv/bin/activate && ansible -i inventory/hosts.yml all -m ping"
 
-ping-pis:
+ping-pis: check-deps
 	@bash -c ". .venv/bin/activate && ansible -i inventory/hosts.yml pis -m ping"
 
-ping-proxmox:
+ping-proxmox: check-deps
 	@bash -c ". .venv/bin/activate && ansible -i inventory/hosts.yml proxmox -m ping"
 
 bootstrap:
@@ -58,13 +81,13 @@ bootstrap-pi-a:
 	@echo "Bootstrapping Pi-A only..."
 	@bash -c ". .venv/bin/activate && ansible-playbook -i inventory/bootstrap-hosts.yml playbooks/bootstrap-network.yml --limit pi-a --ask-pass --ask-become-pass"
 
-setup-pis:
+setup-pis: check-deps
 	@bash -c ". .venv/bin/activate && ansible-playbook -i inventory/hosts.yml playbooks/setup-pis.yml"
 
-setup-pi-a:
+setup-pi-a: check-deps
 	@bash -c ". .venv/bin/activate && ansible-playbook -i inventory/hosts.yml playbooks/setup-pis.yml --limit pi-a"
 
-setup-pi-b:
+setup-pi-b: check-deps
 	@bash -c ". .venv/bin/activate && ansible-playbook -i inventory/hosts.yml playbooks/setup-pis.yml --limit pi-b"
 
 setup-proxmox:
@@ -118,13 +141,18 @@ status:
 	@bash -c ". .venv/bin/activate && ansible -i inventory/hosts.yml proxmox -a 'uptime'" 2>/dev/null || echo "Cannot reach Proxmox nodes"
 
 lint:
-	@bash -c ". .venv/bin/activate && ansible-lint playbooks/*.yml" || true
-	@bash -c ". .venv/bin/activate && yamllint inventory/*.yml group_vars/*.yml" || true
+	@echo "Linting Ansible playbooks..."
+	@bash -c ". .venv/bin/activate && ansible-lint playbooks/*.yml"
+	@echo "Linting YAML files..."
+	@bash -c ". .venv/bin/activate && yamllint inventory/*.yml group_vars/*.yml 2>/dev/null" || echo "Note: yamllint not installed or no issues found"
 
 clean:
-	rm -f /tmp/wireguard_keys_* /tmp/pihole_password_*
-	find . -type f -name "*.retry" -delete
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@echo "Cleaning temporary files..."
+	@rm -f /tmp/wireguard_keys_* /tmp/pihole_password_*
+	@find . -type f -name "*.retry" -delete
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	@echo "Clean complete"
 
 # Dry run / check mode targets
 check-bootstrap:
