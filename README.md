@@ -117,3 +117,11 @@ graph TD
 - **Services**: Pi-hole DNS/DHCP, Ad-blocking
 - **Port**: 53/TCP/UDP (DNS), 80/TCP (Web UI)
 - **Access**: http://10.20.0.3/admin
+
+#### Proxmox Mini PC's for HA K8's
+ 
+| Host | IP | VM ID Range | Purpose |
+|------|-----|-------------|---------|
+| pve-01 | 10.20.0.10 | 100-199 | Kubernetes Control Plane + Worker Node VMs |
+| pve-02 | 10.20.0.11 | 200-299 | Kubernetes Control Plane + Worker Node VMs |
+| pve-03 | 10.20.0.12 | 300-399 | Kubernetes Control Plane + Worker Node VMs |
