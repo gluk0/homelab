@@ -1,0 +1,104 @@
+---
+# Playbook to fix CNI network issues across all Kubernetes nodes
+# Use this when pods fail to create with "failed to set bridge addr" errors
+
+- name: Fix CNI Network Issues on All Nodes
+  hosts: k8s_control_planes,k8s_workers
+  become: yes
+  gather_facts: no
+  serial: 1  # Do one node at a time to minimize disruption
+
+  tasks:
+    - name: Stop kubelet
+      systemd:
+        name: kubelet
+        state: stopped
+      ignore_errors: yes
+
+    - name: Stop containerd
+      systemd:
+        name: containerd
+        state: stopped
+
+    - name: Remove cni0 bridge interface
+      shell: |
+        ip link set cni0 down
+        ip link delete cni0
+      ignore_errors: yes
+
+    - name: Remove flannel.1 interface
+      shell: |
+        ip link set flannel.1 down
+        ip link delete flannel.1
+      ignore_errors: yes
+
+    - name: Clean CNI network cache
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/cni/networks
+        - /var/lib/cni/results
+      ignore_errors: yes
+
+    - name: Start containerd
+      systemd:
+        name: containerd
+        state: started
+        enabled: yes
+
+    - name: Start kubelet
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+
+    - name: Wait for node to be ready
+      pause:
+        seconds: 15
+
+- name: Restart Flannel DaemonSet
+  hosts: k8s_control_planes[0]
+  become: yes
+  become_user: ansible
+  gather_facts: no
+
+  tasks:
+    - name: Restart Flannel pods
+      shell: kubectl rollout restart daemonset/kube-flannel-ds -n kube-flannel
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      ignore_errors: yes
+
+    - name: Wait for Flannel pods to be ready
+      shell: kubectl wait --for=condition=ready pod -l app=flannel -n kube-flannel --timeout=120s
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      retries: 3
+      delay: 10
+      ignore_errors: yes
+
+    - name: Delete stuck flux pods
+      shell: kubectl delete pods --all -n flux-system --force --grace-period=0
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      ignore_errors: yes
+
+    - name: Wait for all nodes to be ready
+      shell: kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      register: nodes_status
+      until: "'False' not in nodes_status.stdout"
+      retries: 12
+      delay: 10
+
+    - name: Display cluster status
+      shell: kubectl get nodes && echo "" && kubectl get pods -n flux-system
+      environment:
+        KUBECONFIG: /home/ansible/.kube/config
+      register: cluster_status
+
+    - name: Show status
+      debug:
+        msg: "{{ cluster_status.stdout_lines }}"
