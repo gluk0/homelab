@@ -21,5 +21,4 @@ if [ "$IFACE" = "eno1" ]; then
 fi
 
 - NIC: Intel I219-V (e1000e driver)
-- MAC: 98:fa:9b:83:7c:11
 - Kernel: 6.14.8-2-pve
