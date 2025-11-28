@@ -2,3 +2,7 @@
 pve_node_name: pve-01
 proxmox_api_token_id: "root@pam!ansible"
 proxmox_api_token_secret: "{{ lookup('env', 'PVE_01_API_TOKEN_SECRET') }}"
+
+# NIC interface configuration
+nic_interface: eno1
+nic_disable_offload: true
