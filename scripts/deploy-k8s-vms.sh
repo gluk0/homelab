@@ -13,7 +13,4 @@ else
     uv run ansible-playbook -i inventory/hosts.yml playbooks/setup-k8s-vms.yml
 fi
 
-echo ""
-echo "=========================================="
-echo "✅ K8s VM deployment completed!"
 echo "=========================================="
