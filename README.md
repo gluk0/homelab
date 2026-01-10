@@ -9,7 +9,8 @@ Ansible repository for Proxmox and Kubernetes bootstrapping for DeskPi rack and 
 ## 🚀 Rack Bootstrapping
 ```bash 
 cd /home/rich/homelab
-# Simple attempt at full rebuild (2/3 working attempts.)
+# Simple attempt at full
+# rebuild (2/3 working attempts.)
 
 
 # 1. Bootstrap (first time only)
