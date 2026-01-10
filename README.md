@@ -1,6 +1,6 @@
 # homelab
 
-Ansible repository for Proxmox and Kubernetes bootstrapping, Router seeding is in `./openwrt` 
+Ansible repository for Proxmox and Kubernetes bootstrapping for DeskPi rack and OpenWrt Router.
 
 <table>
 <tr>
@@ -9,29 +9,23 @@ Ansible repository for Proxmox and Kubernetes bootstrapping, Router seeding is i
 ## 🚀 Rack Bootstrapping
 ```bash 
 cd /home/rich/homelab
+# Simple attempt at full rebuild (2/3 working attempts.)
 
 
 # 1. Bootstrap (first time only)
 make bootstrap
-
 # 2. Setup Pis
 make setup-pis
-
 # 3. Setup Proxmox
 make setup-proxmox
-
 # 4. Create Proxmox Cluster
 make setup-proxmox-cluster
-
 # 5. Setup Kubernetes VMs
 make setup-k8s
-
 # 6. Deploy Kubernetes
 make deploy-k8s
-
 # 7. Setup Portainer
 make setup-portainer
-
 # 8. Check status
 make status
 ```
@@ -45,33 +39,6 @@ make status
 </td>
 </tr>
 </table>
-
-
-## 🔧 Common Tasks
-
-### WireGuard Status
-
-```bash
-ssh ansible@10.20.0.2
-sudo wg show
-sudo ufw status
-sudo systemctl status wg-quick@wg0
-```
-
-## 🔑 Default Ports
-
-| Service | Port | Protocol |
-|---------|------|----------|
-| SSH | 22 | TCP |
-| DNS | 53 | TCP/UDP |
-| HTTP | 80 | TCP |
-| HTTPS | 443 | TCP |
-| WireGuard | 51820 | UDP |
-| Proxmox Web | 8006 | TCP |
-
-``` ansible -i inventory/hosts.yml all -m ping -vvv ```
-
-
 
 ## network
 
@@ -119,23 +86,3 @@ graph TD
 
 
 ```
-
-#### Pi-A (Bastion)
-- **Role**: `pi-bastion`
-- **Services**: WireGuard VPN, SSH jump host
-- **Port**: 51820/UDP (WireGuard)
-- **Access**: Primary entry point for remote administration
-
-#### Pi-B (DNS)
-- **Role**: `pi-hole`
-- **Services**: Pi-hole DNS/DHCP, Ad-blocking
-- **Port**: 53/TCP/UDP (DNS), 80/TCP (Web UI)
-- **Access**: http://10.20.0.3/admin
-
-#### Proxmox Mini PC's for HA K8's
- 
-| Host | IP | VM ID Range | Purpose |
-|------|-----|-------------|---------|
-| pve-01 | 10.20.0.10 | 100-199 | Kubernetes Control Plane + Worker Node VMs |
-| pve-02 | 10.20.0.11 | 200-299 | Kubernetes Control Plane + Worker Node VMs |
-| pve-03 | 10.20.0.12 | 300-399 | Kubernetes Control Plane + Worker Node VMs |

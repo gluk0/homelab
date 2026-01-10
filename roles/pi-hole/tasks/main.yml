@@ -11,7 +11,11 @@
       - curl
       - git
       - sudo
+      - ca-certificates
+      - nano
+      - dhcpcd5
       - lsof
+      - iproute2
       - dnsutils
       - netcat-openbsd
     state: present
